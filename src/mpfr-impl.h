@@ -1,6 +1,6 @@
 /* Utilities for MPFR developers, not exported.
 
-Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013 Free Software Foundation, Inc.
+Copyright 1999-2015 Free Software Foundation, Inc.
 Contributed by the AriC and Caramel projects, INRIA.
 
 This file is part of the GNU MPFR Library.
@@ -62,7 +62,12 @@ http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
 # include "config.h"
 #endif
 
-#ifdef  MPFR_HAVE_GMP_IMPL /* Build with gmp internals*/
+/* For the definition of MPFR_THREAD_ATTR. GCC/ICC detection macros are
+   no longer used, as they sometimes gave incorrect information about
+   the support of thread-local variables. A configure check is now done. */
+#include "mpfr-thread.h"
+
+#ifdef  MPFR_HAVE_GMP_IMPL /* Build with gmp internals */
 
 # ifndef __GMP_H__
 #  include "gmp.h"
@@ -103,13 +108,6 @@ http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
 #ifndef mpn_sqr_n
 # define mpn_sqr_n(dst,src,n) mpn_mul((dst),(src),(n),(src),(n))
 #endif
-
-/* For the definition of MPFR_THREAD_ATTR. GCC/ICC detection macros are
-   no longer used, as they sometimes gave incorrect information about
-   the support of thread-local variables. A configure check is now done.
-   If the use of detection macros is needed in the future, this could be
-   moved below (after the detection macros are defined). */
-#include "mpfr-thread.h"
 
 
 /******************************************************
@@ -191,7 +189,7 @@ typedef __gmp_const mp_limb_t *mpfr_limb_srcptr;
 # endif
 #endif
 
-
+#define MPFR_BYTES_PER_MP_LIMB (GMP_NUMB_BITS/CHAR_BIT)
 
 /******************************************************
  ******************** Check GMP ***********************
@@ -377,7 +375,7 @@ __MPFR_DECLSPEC extern const mpfr_t __gmpfr_four;
  ******************** Assertions **********************
  ******************************************************/
 
-/* Compile with -DWANT_ASSERT to check all assert statements */
+/* Compile with -DMPFR_WANT_ASSERT to check all assert statements */
 
 /* Note: do not use GMP macros ASSERT_ALWAYS and ASSERT as they are not
    expressions, and as a consequence, they cannot be used in a for(),
@@ -388,7 +386,7 @@ __MPFR_DECLSPEC extern const mpfr_t __gmpfr_four;
    ((void) ((MPFR_UNLIKELY(expr)) || MPFR_UNLIKELY( (ASSERT_FAIL(expr),0) )))
 
 /* MPFR_ASSERTD(expr): assertions that should be checked when testing */
-#ifdef WANT_ASSERT
+#ifdef MPFR_WANT_ASSERT
 # define MPFR_EXP_CHECK 1
 # define MPFR_ASSERTD(expr)  MPFR_ASSERTN (expr)
 #else
@@ -468,8 +466,16 @@ __MPFR_DECLSPEC extern const mpfr_t __gmpfr_four;
 #define MPFR_LIMBS_PER_FLT ((IEEE_FLT_MANT_DIG-1)/GMP_NUMB_BITS+1)
 
 /* Visual C++ doesn't support +1.0/0.0, -1.0/0.0 and 0.0/0.0
-   at compile time. */
-#if defined(_MSC_VER) && defined(_WIN32) && (_MSC_VER >= 1200)
+   at compile time.
+   Clang with -fsanitize=undefined is a bit similar due to a bug:
+     http://llvm.org/bugs/show_bug.cgi?id=17381
+   but even without its sanitizer, it may be better to use the
+   double_zero version until IEEE 754 division by zero is properly
+   supported:
+     http://llvm.org/bugs/show_bug.cgi?id=17000
+*/
+#if (defined(_MSC_VER) && defined(_WIN32) && (_MSC_VER >= 1200)) || \
+    defined(__clang__)
 static double double_zero = 0.0;
 # define DBL_NAN (double_zero/double_zero)
 # define DBL_POS_INF ((double) 1.0/double_zero)
@@ -501,6 +507,8 @@ static double double_zero = 0.0;
    (with Xcode 2.4.1, i.e. the latest one). */
 #define LVALUE(x) (&(x) == &(x) || &(x) != &(x))
 #define DOUBLE_ISINF(x) (LVALUE(x) && ((x) > DBL_MAX || (x) < -DBL_MAX))
+/* The DOUBLE_ISNAN(x) macro is also valid on long double x
+   (assuming that the compiler isn't too broken). */
 #ifdef MPFR_NANISNAN
 /* Avoid MIPSpro / IRIX64 / gcc -ffast-math (incorrect) optimizations.
    The + must not be replaced by a ||. With gcc -ffast-math, NaN is
@@ -727,8 +735,8 @@ typedef intmax_t mpfr_eexp_t;
 /* Use MPFR_GET_EXP and MPFR_SET_EXP instead of MPFR_EXP directly,
    unless when the exponent may be out-of-range, for instance when
    setting the exponent before calling mpfr_check_range.
-   MPFR_EXP_CHECK is defined when WANT_ASSERT is defined, but if you
-   don't use WANT_ASSERT (for speed reasons), you can still define
+   MPFR_EXP_CHECK is defined when MPFR_WANT_ASSERT is defined, but if you
+   don't use MPFR_WANT_ASSERT (for speed reasons), you can still define
    MPFR_EXP_CHECK by setting -DMPFR_EXP_CHECK in $CFLAGS. */
 
 #ifdef MPFR_EXP_CHECK
@@ -920,7 +928,7 @@ typedef union { mp_size_t s; mp_limb_t l; } mpfr_size_limb_t;
 #define MPFR_SET_ALLOC_SIZE(x, n) \
  ( ((mp_size_t*) MPFR_MANT(x))[-1] = n)
 #define MPFR_MALLOC_SIZE(s) \
-  ( sizeof(mpfr_size_limb_t) + BYTES_PER_MP_LIMB * ((size_t) s) )
+  ( sizeof(mpfr_size_limb_t) + MPFR_BYTES_PER_MP_LIMB * ((size_t) s) )
 #define MPFR_SET_MANT_PTR(x,p) \
    (MPFR_MANT(x) = (mp_limb_t*) ((mpfr_size_limb_t*) p + 1))
 #define MPFR_GET_REAL_PTR(x) \
@@ -954,7 +962,7 @@ extern unsigned char *mpfr_stack;
 #endif
 
 #define MPFR_TMP_LIMBS_ALLOC(N) \
-  ((mp_limb_t *) MPFR_TMP_ALLOC ((size_t) (N) * BYTES_PER_MP_LIMB))
+  ((mp_limb_t *) MPFR_TMP_ALLOC ((size_t) (N) * MPFR_BYTES_PER_MP_LIMB))
 
 /* temporary allocate 1 limb at xp, and initialize mpfr variable x */
 /* The temporary var doesn't have any size field, but it doesn't matter
@@ -1130,8 +1138,18 @@ do {                                                                  \
    (r) = _size * GMP_NUMB_BITS - _cnt;       \
   } while (0)
 
-/* Needs <locale.h> */
-#ifdef HAVE_LOCALE_H
+/* MPFR_LCONV_DPTS can also be forced to 0 or 1 by the user. */
+#ifndef MPFR_LCONV_DPTS
+# if defined(HAVE_LOCALE_H) && \
+     defined(HAVE_STRUCT_LCONV_DECIMAL_POINT) && \
+     defined(HAVE_STRUCT_LCONV_THOUSANDS_SEP)
+#  define MPFR_LCONV_DPTS 1
+# else
+#  define MPFR_LCONV_DPTS 0
+# endif
+#endif
+
+#if MPFR_LCONV_DPTS
 #include <locale.h>
 /* Warning! In case of signed char, the value of MPFR_DECIMAL_POINT may
    be negative (the ISO C99 does not seem to forbid negative values). */

@@ -1,6 +1,6 @@
 /* mpfr_div -- divide two floating-point numbers
 
-Copyright 1999, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013 Free Software Foundation, Inc.
+Copyright 1999, 2001-2015 Free Software Foundation, Inc.
 Contributed by the AriC and Caramel projects, INRIA.
 
 This file is part of the GNU MPFR Library.
@@ -750,7 +750,9 @@ mpfr_div (mpfr_ptr q, mpfr_srcptr u, mpfr_srcptr v, mpfr_rnd_t rnd_mode)
  truncate_check_qh:
   if (qh)
     {
-      qexp ++;
+      if (MPFR_LIKELY (qexp < MPFR_EXP_MAX))
+        qexp ++;
+      /* else qexp is now incorrect, but one will still get an overflow */
       q0p[q0size - 1] = MPFR_LIMB_HIGHBIT;
     }
   goto truncate;
@@ -765,7 +767,9 @@ mpfr_div (mpfr_ptr q, mpfr_srcptr u, mpfr_srcptr v, mpfr_rnd_t rnd_mode)
   inex = 1; /* always here */
   if (mpn_add_1 (q0p, q0p, q0size, MPFR_LIMB_ONE << sh))
     {
-      qexp ++;
+      if (MPFR_LIKELY (qexp < MPFR_EXP_MAX))
+        qexp ++;
+      /* else qexp is now incorrect, but one will still get an overflow */
       q0p[q0size - 1] = MPFR_LIMB_HIGHBIT;
     }
 
